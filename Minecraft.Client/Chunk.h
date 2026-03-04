@@ -47,7 +47,7 @@ public:
     int xRenderOffs, yRenderOffs, zRenderOffs;
  
     int xm, ym, zm;
-    shared_ptr<AABB> bb;
+    std::shared_ptr<AABB> bb;
 	ClipChunk *clipChunk;
 
     int id;

@@ -105,6 +105,8 @@ void PreStitchedTextureMap::stitch()
 	}
 	else
 #endif
+	texturePack->generateStitched(texturesByName); // add fallback so custom ones work?
+
 	if(texturePack->hasFile(L"res/" + filename,false))
 	{
 		drive = texturePack->getPath(true);

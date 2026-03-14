@@ -1,7 +1,10 @@
 #include "stdafx.h"
 #include "Textures.h"
+#include "StitchedTexture.h"
 #include "AbstractTexturePack.h"
+#include "TexturePackRepository.h"
 #include "..\Minecraft.World\InputOutputStream.h"
+#include "..\Minecraft.World\FileInputStream.h"
 #include "..\Minecraft.World\StringHelpers.h"
 
 const unordered_map<std::wstring, std::wstring> AbstractTexturePack::INDEXED_TO_JAVA_MAP = {
@@ -471,6 +474,487 @@ wstring AbstractTexturePack::getAnimationString(const wstring &textureName, cons
 	return result;
 }
 
+struct UV {
+	float x0, y0, x1, y1;
+
+	float width(float imgSize) {
+		return (x1 - x0) * imgSize - 1;
+	}
+
+	float height(float imgSize) {
+		return (y1 - y0) * imgSize - 1;
+	}
+
+	UV operator /=(const float other) {
+		x0 /= other;
+		y0 /= other;
+		x1 /= other;
+		y1 /= other;
+		return *this;
+	}
+};
+
+BufferedImage* AbstractTexturePack::getBedTex(std::wstring name) {
+	
+	if (bedTexCache.get() == nullptr) {
+		BufferedImage* bedtex = getImageResource(L"assets/minecraft/textures/entity/bed/red.png", true);
+		if (bedtex != nullptr) {
+			if (bedtex->getWidth() < 0 || bedtex->getHeight() < 0)
+				return nullptr;
+
+			int len = bedtex->getWidth() * bedtex->getHeight();
+			bedTexCache = std::make_unique<BufferedImage>(bedtex->getWidth(), bedtex->getHeight(), 0);
+			memcpy(bedTexCache->getData(), bedtex->getData(), len * sizeof(int));
+			delete bedtex;
+		}
+	}
+
+	if (bedTexCache.get() == nullptr) { // todo: rip from og atlas
+		app.DebugPrintf("Failed to load bed texture, returning null\n");
+		return nullptr;
+	}
+
+	// hardcoded in java and no way to load it here, I hate hardcoding this but its what I got
+	UV	feetEnd, feetEndStubL, feetEndStubR,
+		feetSide, feetSideStub, 
+		headSide, headSideStub,
+		headEnd, headEndStubL, headEndStubR,
+		feetFace, headFace;
+
+	// This code is extremely dumb, x0 and y0 must always be less than x1 and y1
+	// These are the top left of the pixel, so add 1 extra for x1 and y1
+	const float baseBedTexSize = 64; // original bed tex size, dont change unless new base game res changes
+	headFace = { 6, 6, 22, 22 };
+	feetFace = { 6, 28, 22, 44 };
+	feetFace /= baseBedTexSize; headFace /= baseBedTexSize;
+
+	feetEnd = { 22, 22, 38, 28 };
+	headEnd = { 6, 0, 22, 6 };
+	feetEnd /= baseBedTexSize; headEnd /= baseBedTexSize;
+
+	feetEndStubL = { 53, 3, 56, 6 };
+	feetEndStubR = { 50, 15, 53, 18 };
+	feetEndStubL /= baseBedTexSize; feetEndStubR /= baseBedTexSize;
+
+	headEndStubL = { 53, 21, 56, 24 };
+	headEndStubR = { 50, 9, 53, 12 };
+	headEndStubL /= baseBedTexSize; headEndStubR /= baseBedTexSize;
+
+	headSide = { 22, 6, 28, 22 };
+	headSideStub = { 50, 21, 53, 24 };
+	headSide /= baseBedTexSize; headSideStub /= baseBedTexSize;
+
+	feetSide = { 22, 28, 28, 44 };
+	feetSideStub = { 53, 15, 56, 18 };
+	feetSide /= baseBedTexSize; feetSideStub /= baseBedTexSize;
+
+	// Output uvs
+
+	UV outBedBody, outStubL, outStubR, outBedFace;
+	outBedBody = { 0, 7, 16, 13 };
+	outStubL = { 0, 13, 3, 16 };
+	outStubR = { 13, 13, 16, 16 };
+	outBedFace = { 0, 0, 16, 16 };
+	outBedBody /= 16; outStubL /= 16; outStubR /= 16; outBedFace /= 16;
+
+	const int bedTexSize = bedTexCache->getWidth();
+	auto workTex = new BufferedImage(texSize, texSize, GL_RGBA);
+	auto workPix = reinterpret_cast<Pixel*>(workTex->getData());
+	auto bedPix = reinterpret_cast<Pixel*>(bedTexCache->getData());
+	memset(workPix, 0, texSize * texSize * sizeof(Pixel));
+
+	if (name == L"bed_feet_end") {
+
+		// side body minus legs
+		for (int y = 0; y <= outBedBody.height(texSize); y++)
+			for (int x = 0; x <= outBedBody.width(texSize); x++) {
+				// first get raw src.x0 of tex to sample from current uv pixel, then current uv value * targetUV dimension
+				// hopefully this can sample any size as long as dst is always equal or larger res
+
+				int srcx = roundf((feetEnd.x0 * bedTexSize) + (x / outBedBody.width(texSize)) * feetEnd.width(bedTexSize));
+				int srcy = roundf((feetEnd.y0 * bedTexSize) + (1 - (y / outBedBody.height(texSize))) * feetEnd.height(bedTexSize));
+				int dstx = roundf((outBedBody.x0 * texSize) + (x / outBedBody.width(texSize)) * outBedBody.width(texSize));
+				int dsty = roundf((outBedBody.y0 * texSize) + (y / outBedBody.height(texSize)) * outBedBody.height(texSize));
+
+				int srcIdx = srcy * bedTexCache->getWidth() + srcx;
+				int dstIdx = dsty * texSize + dstx;
+
+				(&workPix[dstIdx])->raw = (&bedPix[srcIdx])->raw;
+			}
+
+		// left leg
+		for (int y = 0; y <= outStubL.height(texSize); y++)
+			for (int x = 0; x <= outStubL.width(texSize); x++) {
+				int srcx = roundf((feetEndStubL.x0 * bedTexSize) + (x / outStubL.height(texSize)) * feetEndStubL.width(bedTexSize));
+				int srcy = roundf((feetEndStubL.y0 * bedTexSize) + (y / outStubL.width(texSize)) * feetEndStubL.height(bedTexSize));
+				int dstx = roundf((outStubL.x0 * texSize) + (x / outStubL.width(texSize)) * outStubL.width(texSize));
+				int dsty = roundf((outStubL.y0 * texSize) + (y / outStubL.height(texSize)) * outStubL.height(texSize));
+
+				int srcIdx = srcy * bedTexCache->getWidth() + srcx;
+				int dstIdx = dsty * texSize + dstx;
+
+				(&workPix[dstIdx])->raw = (&bedPix[srcIdx])->raw;
+			}
+
+		// right leg
+		for (int y = 0; y <= outStubR.height(texSize); y++)
+			for (int x = 0; x <= outStubR.width(texSize); x++) {
+				int srcx = roundf((feetEndStubR.x0 * bedTexSize) + (x / outStubR.height(texSize)) * feetEndStubR.width(bedTexSize));
+				int srcy = roundf((feetEndStubR.y0 * bedTexSize) + (y / outStubR.width(texSize)) * feetEndStubR.height(bedTexSize));
+				int dstx = roundf((outStubR.x0 * texSize) + (x / outStubR.width(texSize)) * outStubR.width(texSize));
+				int dsty = roundf((outStubR.y0 * texSize) + (y / outStubR.height(texSize)) * outStubR.height(texSize));
+
+				int srcIdx = srcy * bedTexCache->getWidth() + srcx;
+				int dstIdx = dsty * texSize + dstx;
+
+				(&workPix[dstIdx])->raw = (&bedPix[srcIdx])->raw;
+			}
+
+		return workTex;
+	} else if (name == L"bed_feet_side") {
+
+		// side body minus leg
+		for (int y = 0; y <= outBedBody.height(texSize); y++)
+			for (int x = 0; x <= outBedBody.width(texSize); x++) {
+				// first get raw src.x0 of tex to sample from current uv pixel, then current uv value * targetUV dimension
+				// hopefully this can sample any size as long as dst is always equal or larger res
+
+				int srcx = roundf((feetSide.x0 * bedTexSize) + (y / outBedBody.height(texSize)) * feetSide.width(bedTexSize));
+				int srcy = roundf((feetSide.y0 * bedTexSize) + (1 - (x / outBedBody.width(texSize))) * feetSide.height(bedTexSize));
+				int dstx = roundf((outBedBody.x0 * texSize) + (x / outBedBody.width(texSize)) * outBedBody.width(texSize));
+				int dsty = roundf((outBedBody.y0 * texSize) + (y / outBedBody.height(texSize)) * outBedBody.height(texSize));
+
+				int srcIdx = srcy * bedTexCache->getWidth() + srcx;
+				int dstIdx = dsty * texSize + dstx;
+
+				(&workPix[dstIdx])->raw = (&bedPix[srcIdx])->raw;
+			}
+
+		// side leg
+		for (int y = 0; y <= outStubL.height(texSize); y++)
+			for (int x = 0; x <= outStubL.width(texSize); x++) {
+				int srcx = roundf((feetSideStub.x0 * bedTexSize) + (x / outStubL.height(texSize)) * feetSideStub.width(bedTexSize));
+				int srcy = roundf((feetSideStub.y0 * bedTexSize) + (y / outStubL.width(texSize)) * feetSideStub.height(bedTexSize));
+				int dstx = roundf((outStubL.x0 * texSize) + (x / outStubL.width(texSize)) * outStubL.width(texSize));
+				int dsty = roundf((outStubL.y0 * texSize) + (y / outStubL.height(texSize)) * outStubL.height(texSize));
+
+				int srcIdx = srcy * bedTexCache->getWidth() + srcx;
+				int dstIdx = dsty * texSize + dstx;
+
+				(&workPix[dstIdx])->raw = (&bedPix[srcIdx])->raw;
+			}
+
+		return workTex;
+	} else if (name == L"bed_head_side") {
+
+		// side body minus leg
+		for (int y = 0; y <= outBedBody.height(texSize); y++)
+			for (int x = 0; x <= outBedBody.width(texSize); x++) {
+				// first get raw src.x0 of tex to sample from current uv pixel, then current uv value * targetUV dimension
+				// hopefully this can sample any size as long as dst is always equal or larger res
+
+				int srcx = roundf((headSide.x0 * bedTexSize) + (y / outBedBody.height(texSize)) * headSide.width(bedTexSize));
+				int srcy = roundf((headSide.y0 * bedTexSize) + (1 - (x / outBedBody.width(texSize))) * headSide.height(bedTexSize));
+				int dstx = roundf((outBedBody.x0 * texSize) + (x / outBedBody.width(texSize)) * outBedBody.width(texSize));
+				int dsty = roundf((outBedBody.y0 * texSize) + (y / outBedBody.height(texSize)) * outBedBody.height(texSize));
+
+				int srcIdx = srcy * bedTexCache->getWidth() + srcx;
+				int dstIdx = dsty * texSize + dstx;
+
+				(&workPix[dstIdx])->raw = (&bedPix[srcIdx])->raw;
+			}
+
+		// side leg
+		for (int y = 0; y <= outStubR.height(texSize); y++)
+			for (int x = 0; x <= outStubR.width(texSize); x++) {
+				int srcx = roundf((headSideStub.x0 * bedTexSize) + (x / outStubR.height(texSize)) * headSideStub.width(bedTexSize));
+				int srcy = roundf((headSideStub.y0 * bedTexSize) + (y / outStubR.width(texSize)) * headSideStub.height(bedTexSize));
+				int dstx = roundf((outStubR.x0 * texSize) + (x / outStubR.width(texSize)) * outStubR.width(texSize));
+				int dsty = roundf((outStubR.y0 * texSize) + (y / outStubR.height(texSize)) * outStubR.height(texSize));
+
+				int srcIdx = srcy * bedTexCache->getWidth() + srcx;
+				int dstIdx = dsty * texSize + dstx;
+
+				(&workPix[dstIdx])->raw = (&bedPix[srcIdx])->raw;
+			}
+
+
+		return workTex;
+	} else if (name == L"bed_head_end") {
+
+		// side body minus legs
+		for (int y = 0; y <= outBedBody.height(texSize); y++)
+			for (int x = 0; x <= outBedBody.width(texSize); x++) {
+				// first get raw src.x0 of tex to sample from current uv pixel, then current uv value * targetUV dimension
+				// hopefully this can sample any size as long as dst is always equal or larger res
+
+				int srcx = roundf((headEnd.x0 * bedTexSize) + (x / outBedBody.width(texSize)) * headEnd.width(bedTexSize));
+				int srcy = roundf((headEnd.y0 * bedTexSize) + (1 - (y / outBedBody.height(texSize))) * headEnd.height(bedTexSize));
+				int dstx = roundf((outBedBody.x0 * texSize) + (x / outBedBody.width(texSize)) * outBedBody.width(texSize));
+				int dsty = roundf((outBedBody.y0 * texSize) + (y / outBedBody.height(texSize)) * outBedBody.height(texSize));
+
+				int srcIdx = srcy * bedTexCache->getWidth() + srcx;
+				int dstIdx = dsty * texSize + dstx;
+
+				(&workPix[dstIdx])->raw = (&bedPix[srcIdx])->raw;
+			}
+
+		// left leg
+		for (int y = 0; y <= outStubL.height(texSize); y++)
+			for (int x = 0; x <= outStubL.width(texSize); x++) {
+				int srcx = roundf((headEndStubL.x0 * bedTexSize) + (x / outStubL.height(texSize)) * headEndStubL.width(bedTexSize));
+				int srcy = roundf((headEndStubL.y0 * bedTexSize) + (y / outStubL.width(texSize)) * headEndStubL.height(bedTexSize));
+				int dstx = roundf((outStubL.x0 * texSize) + (x / outStubL.width(texSize)) * outStubL.width(texSize));
+				int dsty = roundf((outStubL.y0 * texSize) + (y / outStubL.height(texSize)) * outStubL.height(texSize));
+
+				int srcIdx = srcy * bedTexCache->getWidth() + srcx;
+				int dstIdx = dsty * texSize + dstx;
+
+				(&workPix[dstIdx])->raw = (&bedPix[srcIdx])->raw;
+			}
+
+		// right leg
+		for (int y = 0; y <= outStubR.height(texSize); y++)
+			for (int x = 0; x <= outStubR.width(texSize); x++) {
+				int srcx = roundf((headEndStubR.x0 * bedTexSize) + (x / outStubR.height(texSize)) * headEndStubR.width(bedTexSize));
+				int srcy = roundf((headEndStubR.y0 * bedTexSize) + (y / outStubR.width(texSize)) * headEndStubR.height(bedTexSize));
+				int dstx = roundf((outStubR.x0 * texSize) + (x / outStubR.width(texSize)) * outStubR.width(texSize));
+				int dsty = roundf((outStubR.y0 * texSize) + (y / outStubR.height(texSize)) * outStubR.height(texSize));
+
+				int srcIdx = srcy * bedTexCache->getWidth() + srcx;
+				int dstIdx = dsty * texSize + dstx;
+
+				(&workPix[dstIdx])->raw = (&bedPix[srcIdx])->raw;
+			}
+
+		return workTex;
+	} else if (name == L"bed_head_top") {
+
+		for (int y = 0; y <= outBedFace.height(texSize); y++)
+			for (int x = 0; x <= outBedFace.width(texSize); x++) {
+				int srcx = roundf((headFace.x0 * bedTexSize) + (x / outBedFace.width(texSize)) * headFace.width(bedTexSize));
+				int srcy = roundf((headFace.y0 * bedTexSize) + (1 - (y / outBedFace.height(texSize))) * headFace.height(bedTexSize));
+				int dstx = roundf((outBedFace.x0 * texSize) + (y / outBedFace.width(texSize)) * outBedFace.width(texSize));
+				int dsty = roundf((outBedFace.y0 * texSize) + (x / outBedFace.height(texSize)) * outBedFace.height(texSize));
+
+				int srcIdx = srcy * bedTexCache->getWidth() + srcx;
+				int dstIdx = dsty * texSize + dstx;
+
+				(&workPix[dstIdx])->raw = (&bedPix[srcIdx])->raw;
+			}
+
+		return workTex;
+	} else if (name == L"bed_feet_top") {
+
+		for (int y = 0; y <= outBedFace.height(texSize); y++)
+			for (int x = 0; x <= outBedFace.width(texSize); x++) {
+				int srcx = roundf((feetFace.x0 * bedTexSize) + (x / outBedFace.width(texSize)) * feetFace.width(bedTexSize));
+				int srcy = roundf((feetFace.y0 * bedTexSize) + (1 - (y / outBedFace.height(texSize))) * feetFace.height(bedTexSize));
+				int dstx = roundf((outBedFace.x0 * texSize) + (y / outBedFace.width(texSize)) * outBedFace.width(texSize));
+				int dsty = roundf((outBedFace.y0 * texSize) + (x / outBedFace.height(texSize)) * outBedFace.height(texSize));
+
+				int srcIdx = srcy * bedTexCache->getWidth() + srcx;
+				int dstIdx = dsty * texSize + dstx;
+
+				(&workPix[dstIdx])->raw = (&bedPix[srcIdx])->raw;
+			}
+
+		return workTex;
+	}
+
+	return workTex;
+
+}
+
+BufferedImage* AbstractTexturePack::grabFromDefault(pair<wstring, Icon*> item, Pixel* ogAtlas, pair<int, int> ogDimensions) {
+	auto preStitched = static_cast<StitchedTexture*>(item.second);
+
+	auto imag = new BufferedImage(texSize, texSize, GL_RGBA);
+	auto pixels = reinterpret_cast<Pixel*>(imag->getData());
+
+	int x = preStitched->getU0() * ogDimensions.first;
+	int y = preStitched->getV0() * ogDimensions.second;
+
+	for (int j = 0; j < texSize * texSize; j++) {
+		int srcx = x + ((j % texSize) / (float)texSize) * 16;
+		int srcy = y + ((j / texSize) / (float)texSize) * 16;
+		(&pixels[j])->raw = ogAtlas[srcx + (srcy * 256)].raw;
+	}
+
+	return imag;
+}
+
+BufferedImage* getDefaultAtlas(std::wstring atlasFile) {
+	auto defaultPack = Minecraft::GetInstance()->skins->getDefault();
+	auto defaultPath = defaultPack->getPath(true);
+	auto terrainFile = File(defaultPath + L"res\\" + atlasFile);
+
+	byteArray terrainBuf(terrainFile.length());
+	FileInputStream stream(terrainFile);
+	stream.read(terrainBuf);
+
+	return new BufferedImage(terrainBuf.data, terrainBuf.length);
+}
+
+void AbstractTexturePack::generateStitched(unordered_map<wstring, Icon*> texturesByName) {
+	app.DebugPrintf("Generating stitched texture based on map\n");
+
+	BufferedImage *atlas, *srcImg, *defaultAtlas; // I hate that they all need to have the star instead of the type getting it
+	Pixel *atlasPixels, *defaultPixels, *texPixels, *src, *dst;
+
+	int colCount, rowCount, resW, resH; // filled with hardcoded texture widths
+	if (texturesByName.find(L"sand") != texturesByName.end()) { // terrain.png
+		if (hasFile(L"res/terrain.png") || terrainAtlas.get() != nullptr)
+			return;
+
+		app.DebugPrintf("Generating terrain.png...\n");
+
+		defaultAtlas = getDefaultAtlas(L"terrain.png");
+		defaultPixels = reinterpret_cast<Pixel*>(defaultAtlas->getData());
+
+		colCount = 16;
+		rowCount = 32;
+
+		resW = colCount * texSize;
+		resH = rowCount * texSize;
+
+		terrainAtlas = std::make_unique<BufferedImage>(resW, resH, 0);
+		atlas = terrainAtlas.get();
+		atlasPixels = reinterpret_cast<Pixel*>(atlas->getData());
+		
+		for (auto &i : texturesByName) {
+			auto preStitched = static_cast<StitchedTexture*>(i.second);
+			
+			int x = preStitched->getU0() * resW;
+			int y = preStitched->getV0() * resH;
+			int width = (preStitched->getU1() * resW) - x;
+			int height = (preStitched->getV1() * resH) - y;
+
+			if (i.first.find(L"bed_") == 0)
+				srcImg = getBedTex(i.first);
+			else
+				srcImg = getImageResource(L"assets/minecraft/textures/block/" + i.first + L".png", true, false);
+			if (srcImg == nullptr || srcImg->getWidth() < 0 || srcImg->getHeight() < 0){
+				app.DebugPrintf("Failed to find %ls in resource pack!\n", i.first.c_str());
+				srcImg = grabFromDefault(i, defaultPixels, { defaultAtlas->getWidth(), defaultAtlas->getHeight() });
+				//__debugbreak();
+				//continue;
+			}
+
+			int imgW = srcImg->getWidth();
+			int imgH = srcImg->getHeight();
+			if (imgW != texSize || imgH != texSize) {
+				app.DebugPrintf("Texture %ls is wrong size! skipping\n", i.first.c_str());
+				delete srcImg;
+				continue;
+			}
+
+
+			texPixels = reinterpret_cast<Pixel*>(srcImg->getData());
+
+			for (int j = 0; j < imgH * imgW; j++) {
+				Pixel* src = &texPixels[j];
+				Pixel* dst = &atlasPixels[(x + j % imgW) + (resW * (y + j / imgH))];
+				// int imgx = j % imgW; // debugging vars
+				// int imgy = j / imgH;
+				// int dstx = x + imgx;
+				// int dsty = y + imgy; 
+				
+				//unsigned char tmp = src->r; // unblue everything for saving, unsure why they are flipped
+				//src->r = src->b;
+				//src->b = tmp;
+
+				dst->raw =  src->raw;
+			}
+			
+			delete srcImg;
+		}
+
+		/*
+		for (int i = 0; i < resH * resW; i++) { // Magenta test
+			auto pix = &atlasPixels[i];
+			pix->r = 255;
+			pix->g = 0;
+			pix->b = 255;
+			pix->a = 255;
+		}*/
+
+		delete defaultAtlas;
+
+		// Uncomment these two lines and the unblue section above if you are debugging autostitching of the atlas! 
+		// If you forget to uncomment the unblue section the written atlas will have red and blue swapped!
+		//D3DXIMAGE_INFO info = { resW, resH };
+		//RenderManager.SaveTextureData("autostitch.png", &info, atlas->getData());
+	} else { // items.png?
+		if (hasFile(L"res/items.png") || itemAtlas.get() != nullptr)
+			return;
+
+		defaultAtlas = getDefaultAtlas(L"items.png");
+		defaultPixels = reinterpret_cast<Pixel*>(defaultAtlas->getData());
+
+		colCount = rowCount = 16;
+
+		resW = colCount * texSize;
+		resH = rowCount * texSize;
+
+		itemAtlas = std::make_unique<BufferedImage>(resW, resH, 0);
+		atlas = itemAtlas.get();
+		atlasPixels = reinterpret_cast<Pixel*>(atlas->getData());
+
+		for (auto& i : texturesByName) {
+			auto preStitched = static_cast<StitchedTexture*>(i.second);
+
+			int x = preStitched->getU0() * resW;
+			int y = preStitched->getV0() * resH;
+			int width = (preStitched->getU1() * resW) - x;
+			int height = (preStitched->getV1() * resH) - y;
+
+			srcImg = getImageResource(L"assets/minecraft/textures/item/" + i.first + L".png", true, false);
+			if (srcImg == nullptr || srcImg->getWidth() < 0 || srcImg->getHeight() < 0) {
+				app.DebugPrintf("Failed to find %ls in resource pack!\n", i.first.c_str());
+				srcImg = grabFromDefault(i, defaultPixels, { defaultAtlas->getWidth(), defaultAtlas->getHeight() });
+				//__debugbreak();
+				//continue;
+			}
+
+			int imgW = srcImg->getWidth();
+			int imgH = srcImg->getHeight();
+			if (imgW != texSize || imgH != texSize) {
+				app.DebugPrintf("Texture %ls is wrong size! skipping\n", i.first.c_str());
+				delete srcImg;
+				continue;
+			}
+
+
+			texPixels = reinterpret_cast<Pixel*>(srcImg->getData());
+
+			for (int j = 0; j < imgH * imgW; j++) {
+				Pixel* src = &texPixels[j];
+				Pixel* dst = &atlasPixels[(x + j % imgW) + (resW * (y + j / imgH))];
+				// int imgx = j % imgW; // debugging vars
+				// int imgy = j / imgH;
+				// int dstx = x + imgx;
+				// int dsty = y + imgy; 
+
+				//unsigned char tmp = src->r; // unblue everything for saving, unsure why they are flipped
+				//src->r = src->b;
+				//src->b = tmp;
+
+				dst->raw = src->raw;
+			}
+
+			delete srcImg;
+		}
+
+		delete defaultAtlas;
+
+		// Uncomment these two lines and the unblue section above if you are debugging autostitching of the atlas! 
+		// If you forget to uncomment the unblue section the written atlas will have red and blue swapped!
+		//D3DXIMAGE_INFO info = {resW, resH};
+		//RenderManager.SaveTextureData("autostitchitem.png", &info, atlas->getData());
+	}
+}
+
 BufferedImage *AbstractTexturePack::getImageResource(const wstring& File, bool filenameHasExtension /*= false*/, bool bTitleUpdateTexture /*=false*/, const wstring &drive /*=L""*/)
 {
 	const char *pchTexture=wstringtofilename(File);
@@ -646,7 +1130,7 @@ PBYTE AbstractTexturePack::getPackIcon(DWORD &dwImageBytes)
 PBYTE AbstractTexturePack::getPackComparison(DWORD &dwImageBytes)
 {
 	if(m_comparisonSize == 0 || m_comparisonData == NULL) loadComparison();
-
+	
 	dwImageBytes = m_comparisonSize;
 	return m_comparisonData;
 }

@@ -32,9 +32,10 @@ protected:
 	TexturePack *fallback;
 
 	ColourTable *m_colourTable;
-
+	
 	BufferedImage *iconImage;
 	std::unique_ptr<BufferedImage> terrainAtlas, itemAtlas, bedTexCache;
+	BufferedImage* AbstractTexturePack::grabFromDefault(pair<wstring, Icon*> item, Pixel* ogAtlas, pair<int, int> ogDimensions);
 
 private:
 	int textureId;
@@ -71,8 +72,9 @@ public:
 	virtual wstring getDesc1();
 	virtual wstring getDesc2();
 	virtual wstring getWorldName();
-	
 	virtual wstring getAnimationString(const wstring &textureName, const wstring &path, bool allowFallback);
+	BufferedImage* AbstractTexturePack::getBedTex(std::wstring name);
+	virtual void generateStitched(unordered_map<wstring, Icon*> texturesByName);
 
 protected:
 	virtual wstring getAnimationString(const wstring &textureName, const wstring &path);

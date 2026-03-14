@@ -1,12 +1,16 @@
 #pragma once
-using namespace std;
+#include <cstdint>
 
 #include "TexturePack.h"
 
 class BufferedImage;
+union Pixel;
 
 class AbstractTexturePack : public TexturePack
 {
+public:
+	static const unordered_map<std::wstring, std::wstring> INDEXED_TO_JAVA_MAP;
+
 private:
 	const DWORD id;
 	const wstring name;

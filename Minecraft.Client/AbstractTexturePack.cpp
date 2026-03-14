@@ -4,6 +4,232 @@
 #include "..\Minecraft.World\InputOutputStream.h"
 #include "..\Minecraft.World\StringHelpers.h"
 
+const unordered_map<std::wstring, std::wstring> AbstractTexturePack::INDEXED_TO_JAVA_MAP = {
+	{L"res/misc/pumpkinblur.png", L"misc/pumpkinblur.png"},
+	//	L"%blur%/misc/vignette",		// Not currently used
+	{L"res/misc/shadow", L""},
+	//	L"/achievement/bg",				// Not currently used
+	{L"art/kz", L""},
+	{L"res/environment/clouds.png", L"environment/clouds.png"},
+	{L"res/environment/rain.png", L"environment/rain.png"},
+	{L"res/environment/snow.png", L"environment/snow.png"},
+	{L"gui/gui", L""},
+	{L"gui/icons", L""},
+	//{L"item/arrows", L""},
+	//{L"item/boat", L""},
+	//{L"item/cart", L""},
+	//{L"item/sign", L""},
+	{L"res/misc/mapbg", L""},
+	{L"res/misc/mapicons", L""},
+	{L"res/misc/water", L""},
+	{L"res/misc/footprint", L""},
+	//{L"mob/saddle", L""},
+	{L"res/res/mob/sheep_fur.png", L"entity/sheep/sheep_fur.png"},
+	{L"res/mob/spider_eyes.png", L""},
+	{L"res/particles", L""},
+	{L"res/mob/chicken.png", L"entity/chicken.png"},
+	{L"res/mob/cow.png", L"entity/cow/cow.png"},
+	{L"res/mob/pig.png", L"entity/pig/pig.png"},
+	{L"res/mob/sheep.png", L"entity/sheep/sheep.png"},
+	{L"res/mob/squid.png", L"entity/squid/squid.png"},
+	{L"res/mob/wolf.png", L"entity/wolf/wolf.png"},
+	{L"res/mob/wolf_tame.png", L"entity/wolf/wolf_tame.png"},
+	{L"res/mob/wolf_angry.png", L"entity/wolf/wolf_angry.png"},
+	{L"res/mob/creeper.png", L"entity/creeper/creeper.png"},
+	{L"res/mob/ghast.png", L"entity/ghast/ghast.png"},
+	{L"res/mob/ghast_fire.png", L"entity/ghast/ghast_shooting.png"},
+	//{L"res/mob/zombie", L""}, // zombie uses 64x texture
+	//{L"res/mob/pigzombie", L""}, // rip
+	{L"res/mob/skeleton.png", L"entity/skeleton/skeleton.png"},
+	{L"res/mob/slime.png", L"entity/slime/slime.png"},
+	{L"res/mob/spider.png", L"entity/spider/spider.png"},
+	//{L"mob/char", L""},
+	//{L"mob/char1", L""},
+	//{L"mob/char2", L""},
+	//{L"mob/char3", L""},
+	//{L"mob/char4", L""},
+	//{L"mob/char5", L""},
+	//{L"mob/char6", L""},
+	//{L"mob/char7", L""},
+	{L"terrain/moon", L""},
+	{L"terrain/sun", L""},
+	{L"armor/power", L""},
+
+	// 1.8.2
+	{L"res/mob/cavespider.png", L"entity/spider/cave_spider.png"},
+	{L"res/mob/enderman.png", L"entity/enderman/enderman.png"},
+	{L"res/mob/silverfish.png", L"entity/silverfish.png"},
+	{L"res/mob/enderman_eyes.png", L"entity/enderman/enderman_eyes.png"},
+	//{L"res/misc/explosion", L""}, // not bothering to reatlas them rn
+	{L"res/item/xporb.png", L"entity/experience_orb.png"},
+	{L"res/item/chest.png", L"entity/chest/normal.png"},
+	//{L"item/largechest", L"entity/chest/normal"}, // was split in half
+
+	// 1.3.2 
+	{L"res/item/enderchest.png", L"entity/chest/ender.png"},
+
+	// 1.0.1 
+	{L"res/mob/redcow.png", L"entity/cow/mooshroom.png"},
+	//{L"mob/snowman", L""},
+	//{L"mob/enderdragon/ender", L""},
+	{L"res/mob/fire.png", L"entity/blaze.png"},
+	{L"res/mob/lava.png", L"entity/slime/magmacube.png"},
+	//{L"mob/villager/villager", L""},
+	//{L"mob/villager/farmer", L""},
+	//{L"mob/villager/librarian", L""},
+	//{L"mob/villager/priest", L""},
+	//{L"mob/villager/smith", L""},
+	//{L"mob/villager/butcher", L""},
+	{L"res/mob/enderdragon/crystal.png", L"entity/end_crystal/end_crystal.png"},
+	//{L"mob/enderdragon/shuffle", L""},
+	{L"res/mob/enderdragon/beam.png", L"entity/end_crystal/end_crystal_beam.png"},
+	//{L"mob/enderdragon/ender_eyes", L""},
+	{L"res/misc/glint.png", L"misc/enchanted_item_glint.png"},
+	//{L"item/book", L""},
+	{L"res/misc/tunnel.png", L"environment/end_sky.png"},
+	{L"res/misc/particlefield.png", L"entity/end_portal.png"},
+	{L"res/terrain/moon_phases.png", L"environment/moon_phases.png"},
+
+	// 1.2.3
+	{L"res/mob/ozelot.png", L"entity/cat/ocelot.png"},
+	{L"res/mob/cat_black.png", L"entity/cat/black.png"},
+	{L"res/mob/cat_red.png", L"entity/cat/red.png"},
+	{L"res/mob/cat_siamese.png", L"entity/cat/siamese.png"},
+	{L"res/mob/villager_golem.png", L"entity/iron_golem.png"},
+	{L"res/mob/skeleton_wither.png", L"entity/wither_skeleton.png"},
+
+	// TU 14
+	{L"res/mob/wolf_collar.png", L"entity/wolf/wolf_collar.png"},
+	//{L"mob/zombie_villager", L""},
+
+	// 1.6.4
+	{L"res/item/lead_knot.png", L"entity/lead_knot.png"},
+
+	{L"res/misc/beacon_beam.png", L"entity/beacon_beam.png"},
+
+	//{L"res/mob/bat.png", L"entity/bat.png"}, // new uvs is broken
+
+	// incompatible horse armor
+	//{L"mob/horse/donkey", L""},
+	//{L"mob/horse/horse_black", L""},
+	//{L"mob/horse/horse_brown", L""},
+	//{L"mob/horse/horse_chestnut", L""},
+	//{L"mob/horse/horse_creamy", L""},
+	//{L"mob/horse/horse_darkbrown", L""},
+	//{L"mob/horse/horse_gray", L""},
+	//{L"mob/horse/horse_markings_blackdots", L""},
+	//{L"mob/horse/horse_markings_white", L""},
+	//{L"mob/horse/horse_markings_whitedots", L""},
+	//{L"mob/horse/horse_markings_whitefield", L""},
+	//{L"mob/horse/horse_skeleton", L""},
+	//{L"mob/horse/horse_white", L""},
+	//{L"mob/horse/horse_zombie", L""},
+	//{L"mob/horse/mule", L""},
+
+	//{L"mob/horse/armor/horse_armor_diamond", L""},
+	//{L"mob/horse/armor/horse_armor_gold", L""},
+	//{L"mob/horse/armor/horse_armor_iron", L""},
+
+	{ L"res/mob/witch", L"entity/witch.png" },
+
+	{ L"res/mob/wither/wither.png", L"entity/wither/wither.png" },
+	{ L"res/mob/wither/wither_armor.png", L"entity/wither/wither_armor.png" },
+	{ L"res/mob/wither/wither_invulnerable.png", L"entity/wither/wither_invulnerable.png" },
+
+	{ L"res/item/trapped.png", L"entity/chest/trapped.png" },
+	//{ L"item/trapped_double", L"" },
+	//L"item/christmas",
+	//L"item/christmas_double",
+
+#ifdef _LARGE_WORLDS
+	//{L"misc/additionalmapicons", L""},
+#endif
+
+	//{L"font/Default", L""},
+	//{L"font/alternate", L""},
+
+	// skin packs 
+/*	{L"/SP1", L""},
+	{L"/SP2", L""},
+	{L"/SP3", L""},
+	{L"/SPF", L""},
+	{ L""},
+	{// themes L""},
+	{L"/ThSt", L""},
+	{L"/ThIr", L""},
+	{L"/ThGo", L""},
+	{L"/ThDi", L""},
+	{ L""},
+	{// gamerpics L""},
+	{L"/GPAn", L""},
+	{L"/GPCo", L""},
+	{L"/GPEn", L""},
+	{L"/GPFo", L""},
+	{L"/GPTo", L""},
+	{L"/GPBA", L""},
+	{L"/GPFa", L""},
+	{L"/GPME", L""},
+	{L"/GPMF", L""},
+	{L"/GPMM", L""},
+	{L"/GPSE", L""},
+	{ L""},
+	{// avatar items L""},
+	{ L""},
+	{L"/AH_0006", L""},
+	{L"/AH_0003", L""},
+	{L"/AH_0007", L""},
+	{L"/AH_0005", L""},
+	{L"/AH_0004", L""},
+	{L"/AH_0001", L""},
+	{L"/AH_0002", L""},
+	{L"/AT_0001", L""},
+	{L"/AT_0002", L""},
+	{L"/AT_0003", L""},
+	{L"/AT_0004", L""},
+	{L"/AT_0005", L""},
+	{L"/AT_0006", L""},
+	{L"/AT_0007", L""},
+	{L"/AT_0008", L""},
+	{L"/AT_0009", L""},
+	{L"/AT_0010", L""},
+	{L"/AT_0011", L""},
+	{L"/AT_0012", L""},
+	{L"/AP_0001", L""},
+	{L"/AP_0002", L""},
+	{L"/AP_0003", L""},
+	{L"/AP_0004", L""},
+	{L"/AP_0005", L""},
+	{L"/AP_0006", L""},
+	{L"/AP_0007", L""},
+	{L"/AP_0009", L""},
+	{L"/AP_0010", L""},
+	{L"/AP_0011", L""},
+	{L"/AP_0012", L""},
+	{L"/AP_0013", L""},
+	{L"/AP_0014", L""},
+	{L"/AP_0015", L""},
+	{L"/AP_0016", L""},
+	{L"/AP_0017", L""},
+	{L"/AP_0018", L""},
+	{L"/AA_0001", L""},
+	{L"/AT_0013", L""},
+	{L"/AT_0014", L""},
+	{L"/AT_0015", L""},
+	{L"/AT_0016", L""},
+	{L"/AT_0017", L""},
+	{L"/AT_0018", L""},
+	{L"/AP_0019", L""},
+	{L"/AP_0020", L""},
+	{L"/AP_0021", L""},
+	{L"/AP_0022", L""},
+	{L"/AP_0023", L""},
+	{L"/AH_0008", L""},
+	{L"/AH_0009", L""},*/
+
+	//{L"gui/items", L""},
+	//{L"terrain", L""}
+};
+
 AbstractTexturePack::AbstractTexturePack(DWORD id, File *file, const wstring &name, TexturePack *fallback) : id(id), name(name)
 {
 	// 4J init

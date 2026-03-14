@@ -311,6 +311,8 @@ Icon *PreStitchedTextureMap::getMissingIcon()
 }
 
 #define ADD_ICON(row, column, name) (texturesByName[name] =	new SimpleIcon(name,name,horizRatio*column,vertRatio*row,horizRatio*(column+1),vertRatio*(row+1)));
+#define ADD_OBJ_ICON(row, column, tile) (texturesByName[tile->getIconName()] =	new SimpleIcon(tile->getIconName(),tile->getIconName(),horizRatio*column,vertRatio*row,horizRatio*(column+1),vertRatio*(row+1)));
+#define ADD_COL_TILE_ICON(row, column, tile, id) (texturesByName[((ColoredTile*)tile)->getColoredIconName(DyePowderItem::id)] =	new SimpleIcon(((ColoredTile*)tile)->getColoredIconName(DyePowderItem::id),((ColoredTile*)tile)->getColoredIconName(DyePowderItem::id),horizRatio*column,vertRatio*row,horizRatio*(column+1),vertRatio*(row+1)));
 #define ADD_ICON_WITH_NAME(row, column, name, filename) (texturesByName[name] =	new SimpleIcon(name,filename,horizRatio*column,vertRatio*row,horizRatio*(column+1),vertRatio*(row+1)));
 #define ADD_ICON_SIZE(row, column, name, height, width) (texturesByName[name] =	new SimpleIcon(name,name,horizRatio*column,vertRatio*row,horizRatio*(column+width),vertRatio*(row+height)));
 
